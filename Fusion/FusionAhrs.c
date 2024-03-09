@@ -86,12 +86,17 @@ void FusionAhrsSetSettings(FusionAhrs *const ahrs, const FusionAhrsSettings *con
     ahrs->settings.convention = settings->convention;
     ahrs->settings.gain = settings->gain;
     ahrs->settings.gyroscopeRange = settings->gyroscopeRange == 0.0f ? FLT_MAX : 0.98f * settings->gyroscopeRange;
-    ahrs->settings.accelerationRejection = settings->accelerationRejection == 0.0f ? FLT_MAX : powf(0.5f * sinf(FusionDegreesToRadians(settings->accelerationRejection)), 2);
-    ahrs->settings.magneticRejection = settings->magneticRejection == 0.0f ? FLT_MAX : powf(0.5f * sinf(FusionDegreesToRadians(settings->magneticRejection)), 2);
+    ahrs->settings.accelerationRejection = (settings->accelerationRejection == 0.0f)
+                                           ? FLT_MAX
+                                           : powf(0.5f * sinf(FusionDegreesToRadians(settings->accelerationRejection)), 2);
+    ahrs->settings.magneticRejection = (settings->magneticRejection == 0.0f)
+                                       ? FLT_MAX
+                                       : powf(0.5f * sinf(FusionDegreesToRadians(settings->magneticRejection)), 2);
     ahrs->settings.recoveryTriggerPeriod = settings->recoveryTriggerPeriod;
     ahrs->accelerationRecoveryTimeout = ahrs->settings.recoveryTriggerPeriod;
     ahrs->magneticRecoveryTimeout = ahrs->settings.recoveryTriggerPeriod;
-    if ((settings->gain == 0.0f) || (settings->recoveryTriggerPeriod == 0)) { // disable acceleration and magnetic rejection features if gain is zero
+    if ((settings->gain == 0.0f) || (settings->recoveryTriggerPeriod == 0)) {
+        // disable acceleration and magnetic rejection features if gain is zero
         ahrs->settings.accelerationRejection = FLT_MAX;
         ahrs->settings.magneticRejection = FLT_MAX;
     }
@@ -110,14 +115,17 @@ void FusionAhrsSetSettings(FusionAhrs *const ahrs, const FusionAhrsSettings *con
  * @param magnetometer Magnetometer measurement in arbitrary units.
  * @param deltaTime Delta time in seconds.
  */
-void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, const FusionVector accelerometer, const FusionVector magnetometer, const float deltaTime) {
+void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, const FusionVector accelerometer,
+                      const FusionVector magnetometer, const float deltaTime) {
 #define Q ahrs->quaternion.element
 
     // Store accelerometer
     ahrs->accelerometer = accelerometer;
 
     // Reinitialise if gyroscope range exceeded
-    if ((fabs(gyroscope.axis.x) > ahrs->settings.gyroscopeRange) || (fabs(gyroscope.axis.y) > ahrs->settings.gyroscopeRange) || (fabs(gyroscope.axis.z) > ahrs->settings.gyroscopeRange)) {
+    if ((fabs(gyroscope.axis.x) > ahrs->settings.gyroscopeRange) ||
+        (fabs(gyroscope.axis.y) > ahrs->settings.gyroscopeRange) ||
+        (fabs(gyroscope.axis.z) > ahrs->settings.gyroscopeRange)) {
         const FusionQuaternion quaternion = ahrs->quaternion;
         FusionAhrsReset(ahrs);
         ahrs->quaternion = quaternion;
@@ -206,10 +214,16 @@ void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, cons
     const FusionVector halfGyroscope = FusionVectorMultiplyScalar(gyroscope, FusionDegreesToRadians(0.5f));
 
     // Apply feedback to gyroscope
-    const FusionVector adjustedHalfGyroscope = FusionVectorAdd(halfGyroscope, FusionVectorMultiplyScalar(FusionVectorAdd(halfAccelerometerFeedback, halfMagnetometerFeedback), ahrs->rampedGain));
+    const FusionVector adjustedHalfGyroscope = FusionVectorAdd(halfGyroscope,
+                                                               FusionVectorMultiplyScalar(FusionVectorAdd(halfAccelerometerFeedback,
+                                                                                                          halfMagnetometerFeedback),
+                                                                                          ahrs->rampedGain));
 
     // Integrate rate of change of quaternion
-    ahrs->quaternion = FusionQuaternionAdd(ahrs->quaternion, FusionQuaternionMultiplyVector(ahrs->quaternion, FusionVectorMultiplyScalar(adjustedHalfGyroscope, deltaTime)));
+    ahrs->quaternion = FusionQuaternionAdd(ahrs->quaternion,
+                                           FusionQuaternionMultiplyVector(ahrs->quaternion,
+                                                                          FusionVectorMultiplyScalar(adjustedHalfGyroscope,
+                                                                                                     deltaTime)));
 
     // Normalise quaternion
     ahrs->quaternion = FusionQuaternionNormalise(ahrs->quaternion);
@@ -321,7 +335,8 @@ static inline int Clamp(const int value, const int min, const int max) {
  * @param accelerometer Accelerometer measurement in g.
  * @param deltaTime Delta time in seconds.
  */
-void FusionAhrsUpdateNoMagnetometer(FusionAhrs *const ahrs, const FusionVector gyroscope, const FusionVector accelerometer, const float deltaTime) {
+void FusionAhrsUpdateNoMagnetometer(FusionAhrs *const ahrs, const FusionVector gyroscope,
+                                    const FusionVector accelerometer, const float deltaTime) {
 
     // Update AHRS algorithm
     FusionAhrsUpdate(ahrs, gyroscope, accelerometer, FUSION_VECTOR_ZERO, deltaTime);
@@ -341,7 +356,8 @@ void FusionAhrsUpdateNoMagnetometer(FusionAhrs *const ahrs, const FusionVector g
  * @param heading Heading measurement in degrees.
  * @param deltaTime Delta time in seconds.
  */
-void FusionAhrsUpdateExternalHeading(FusionAhrs *const ahrs, const FusionVector gyroscope, const FusionVector accelerometer, const float heading, const float deltaTime) {
+void FusionAhrsUpdateExternalHeading(FusionAhrs *const ahrs, const FusionVector gyroscope, const FusionVector accelerometer,
+                                     const float heading, const float deltaTime) {
 #define Q ahrs->quaternion.element
 
     // Calculate roll
@@ -457,10 +473,14 @@ FusionAhrsInternalStates FusionAhrsGetInternalStates(const FusionAhrs *const ahr
     const FusionAhrsInternalStates internalStates = {
             .accelerationError = FusionRadiansToDegrees(FusionAsin(2.0f * FusionVectorMagnitude(ahrs->halfAccelerometerFeedback))),
             .accelerometerIgnored = ahrs->accelerometerIgnored,
-            .accelerationRecoveryTrigger = ahrs->settings.recoveryTriggerPeriod == 0 ? 0.0f : (float) ahrs->accelerationRecoveryTrigger / (float) ahrs->settings.recoveryTriggerPeriod,
+            .accelerationRecoveryTrigger = (ahrs->settings.recoveryTriggerPeriod == 0)
+                                           ? 0.0f
+                                           : (float) ahrs->accelerationRecoveryTrigger / (float) ahrs->settings.recoveryTriggerPeriod,
             .magneticError = FusionRadiansToDegrees(FusionAsin(2.0f * FusionVectorMagnitude(ahrs->halfMagnetometerFeedback))),
             .magnetometerIgnored = ahrs->magnetometerIgnored,
-            .magneticRecoveryTrigger = ahrs->settings.recoveryTriggerPeriod == 0 ? 0.0f : (float) ahrs->magneticRecoveryTrigger / (float) ahrs->settings.recoveryTriggerPeriod,
+            .magneticRecoveryTrigger = (ahrs->settings.recoveryTriggerPeriod == 0)
+                                       ? 0.0f
+                                       : (float) ahrs->magneticRecoveryTrigger / (float) ahrs->settings.recoveryTriggerPeriod,
     };
     return internalStates;
 }
